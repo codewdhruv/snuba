@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import sentry_sdk
-
 from snuba.clickhouse.columns import ColumnSet
 from snuba.clusters.storage_sets import StorageSetKey
 from snuba.datasets.configuration.json_schema import (
@@ -57,15 +55,14 @@ def build_storage_from_config(
     config_file_path: str,
 ) -> ReadableTableStorage | WritableTableStorage:
     config = load_configuration_data(config_file_path, STORAGE_VALIDATION_SCHEMAS)
-    with sentry_sdk.start_span(op="build", description=f"Storage: {config['name']}"):
-        storage_kwargs = __build_readable_storage_kwargs(config)
-        if config[KIND] == "readable_storage":
-            return ReadableTableStorage(**storage_kwargs)
-        storage_kwargs[STREAM_LOADER] = build_stream_loader(config[STREAM_LOADER])
-        storage_kwargs[WRITER_OPTIONS] = (
-            config[WRITER_OPTIONS] if WRITER_OPTIONS in config else {}
-        )
-        return WritableTableStorage(**storage_kwargs)
+    storage_kwargs = __build_readable_storage_kwargs(config)
+    if config[KIND] == "readable_storage":
+        return ReadableTableStorage(**storage_kwargs)
+    storage_kwargs[STREAM_LOADER] = build_stream_loader(config[STREAM_LOADER])
+    storage_kwargs[WRITER_OPTIONS] = (
+        config[WRITER_OPTIONS] if WRITER_OPTIONS in config else {}
+    )
+    return WritableTableStorage(**storage_kwargs)
 
 
 def __build_storage_schema(config: dict[str, Any]) -> TableSchema:
