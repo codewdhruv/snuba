@@ -165,7 +165,6 @@ class ColumnToCurriedFunction(ColumnToExpression):
 
     from_table_name: Optional[str]
     from_col_name: str
-    to_col_name: str
     to_internal_function: FunctionCallExpr
     to_function_params: Tuple[Expression, ...]
 
