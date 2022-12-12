@@ -26,14 +26,7 @@ from snuba.query.matchers import (
 )
 
 
-# This is a workaround for a mypy bug, found here: https://github.com/python/mypy/issues/5374
-@dataclass(frozen=True)
-class _ColumnToExpression:
-    from_table_name: Optional[str]
-    from_col_name: str
-
-
-class ColumnToExpression(_ColumnToExpression, ColumnMapper, ABC):
+class ColumnToExpression(ColumnMapper, ABC):
     """
     Provides some common logic for all the mappers that transform a specific
     column identified by table and name into one of the allowed expressions
@@ -67,6 +60,8 @@ class ColumnToColumn(ColumnToExpression):
     The alias is not transformed.
     """
 
+    from_table_name: Optional[str]
+    from_col_name: str
     to_table_name: Optional[str]
     to_col_name: str
 
@@ -84,6 +79,8 @@ class ColumnToLiteral(ColumnToExpression):
     Maps a column name into a hardcoded literal preserving the alias.
     """
 
+    from_table_name: Optional[str]
+    from_col_name: str
     to_literal_value: OptionalScalarType
 
     def _produce_output(self, expression: ColumnExpr) -> LiteralExpr:
@@ -96,6 +93,8 @@ class ColumnToFunction(ColumnToExpression):
     Maps a column into a function expression that preserves the alias.
     """
 
+    from_table_name: Optional[str]
+    from_col_name: str
     to_function_name: str
     to_function_params: Tuple[Expression, ...]
 
@@ -107,8 +106,7 @@ class ColumnToFunction(ColumnToExpression):
         )
 
 
-@dataclass(frozen=True)
-class ColumnToIPAddress(ColumnToFunction):
+class ColumnToIPAddress(ColumnMapper):
     """
     Custom column mapper for mapping columns to IP Address.
     TODO: Can remove when we support dynamic expression parsing in config
@@ -129,9 +127,19 @@ class ColumnToIPAddress(ColumnToFunction):
                 (ColumnExpr(None, None, "ip_address_v6"),),
             ),
         )
-        super().__init__(
+        self._mapper = ColumnToFunction(
             from_table_name, from_col_name, to_function_name, to_function_params
         )
+
+    def attempt_map(
+        self,
+        expression: ColumnExpr,
+        children_translator: SnubaClickhouseStrictTranslator,
+    ) -> Optional[ValidColumnMappings]:
+        return self._mapper.attempt_map(expression, children_translator)
+
+    def _produce_output(self, expression: ColumnExpr) -> FunctionCallExpr:
+        return self._mapper._produce_output(expression)
 
 
 @dataclass(frozen=True)
@@ -155,6 +163,9 @@ class ColumnToCurriedFunction(ColumnToExpression):
     Maps a column into a curried function expression that preserves the alias.
     """
 
+    from_table_name: Optional[str]
+    from_col_name: str
+    to_col_name: str
     to_internal_function: FunctionCallExpr
     to_function_params: Tuple[Expression, ...]
 
@@ -218,6 +229,8 @@ class ColumnToMapping(ColumnToExpression):
     array access.
     """
 
+    from_table_name: str
+    from_col_name: str
     to_nested_col_table_name: Optional[str]
     to_nested_col_name: str
     to_nested_mapping_key: str

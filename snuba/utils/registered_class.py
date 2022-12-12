@@ -20,45 +20,56 @@ class RegisteredClassNameCollisionError(Exception):
 
 def _record_init_args(cls: RegisteredClass) -> None:
     from copy import deepcopy
-    from dataclasses import asdict
+    from dataclasses import asdict, is_dataclass
     from inspect import signature
-
-    # this is a dataclass which has already had a post_init added, we don't need to override
-    # anything else
-    if hasattr(cls, "__post_init__"):
-        return
 
     orig_init = getattr(cls, "__init__")
     orig_signature = signature(orig_init)
-    if not orig_signature.parameters or [p for p in orig_signature.parameters] == [
-        "self",
-        "args",
-        "kwargs",
-    ]:
-        # hack around the fact that there is no __init__ constructor for a dataclass when
-        # the class is defined (it's applied afterwards through the dataclass decorator)
+    # hack around the fact that there is no __init__ constructor for a dataclass when
+    # the class is defined (it's applied afterwards through the dataclass decorator)
 
-        def __post_init__(self):
-            object.__setattr__(self, "init_kwargs", asdict(self))
+    if not hasattr(cls, "init_kwargs"):
 
-        setattr(cls, "__post_init__", __post_init__)
+        def init_kwargs(self):
+            print("Access init_kwargs for :", self.__class__)
+            if hasattr(self, "_init_kwargs"):
+                return self._init_kwargs
+            elif is_dataclass(self):
+                return asdict(self)
+            else:
+                return ()
 
-    else:
+        print("add init_kwargs property for :", cls)
+        setattr(cls, "init_kwargs", property(init_kwargs))
 
-        def __init__(self: Any, *args: Any, **kwargs: Any) -> Any:
-            # no need to capture the init_kwargs again if a subclass
-            # has already captured them
-            if not hasattr(self, "init_kwargs"):
-                object.__setattr__(self, "init_kwargs", deepcopy(kwargs))
-                if args:
-                    init_param_names = [p for p in orig_signature.parameters]
-                    i = 0
+    def __init__(self: Any, *args: Any, **kwargs: Any) -> Any:
+        # no need to capture the init_kwargs again if a subclass
+        # has already captured them
+        if not hasattr(self, "_init_kwargs"):
+            object.__setattr__(self, "_init_kwargs", deepcopy(kwargs))
+            if args:
+                init_param_names = [p for p in orig_signature.parameters]
+                i = 0
+                try:
                     while i < len(args):
-                        self.init_kwargs[init_param_names[i + 1]] = args[i]
+                        self._init_kwargs[init_param_names[i + 1]] = args[i]
                         i += 1
-            return orig_init(self, *args, **kwargs)
+                except IndexError as e:
+                    import pdb
 
-        __init__.__signature__ = orig_signature  # type: ignore
+                    pdb.set_trace()
+                    print(e)
+        try:
+            return orig_init(self, *args, **kwargs)
+        except Exception as e:
+            print("Failed to init ", self.__class__, "args: ", args, kwargs)
+            print(e)
+            raise
+
+    __init__.__signature__ = orig_signature  # type: ignore
+    print("override init for :", cls)
+    orig_signature_params = [p for p in orig_signature.parameters]
+    if orig_signature_params and orig_signature_params != ["self", "args", "kwargs"]:
         setattr(cls, "__init__", __init__)
 
 

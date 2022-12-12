@@ -43,12 +43,23 @@ def _build_entity_query_processors(
     ]
 
 
+def _column_mapper_from_name(col_config):
+    try:
+        return ColumnMapper.get_from_name(col_config["mapper"])(**col_config["args"])
+    except TypeError as e:
+        import pdb
+
+        pdb.set_trace()
+        raise Exception("could not instantiate " + str(col_config))
+
+
 def _build_entity_translation_mappers(
     config_translation_mappers: dict[str, Any],
 ) -> TranslationMappers:
     columns_mappers: list[ColumnMapper] = (
         [
-            ColumnMapper.get_from_name(col_config["mapper"])(**col_config["args"])
+            #   ColumnMapper.get_from_name(col_config["mapper"])(**col_config["args"])
+            _column_mapper_from_name(col_config)
             for col_config in config_translation_mappers["columns"]
         ]
         if "columns" in config_translation_mappers
