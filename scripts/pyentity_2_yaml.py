@@ -11,6 +11,7 @@ from snuba.datasets.configuration.utils import serialize_columns
 from snuba.datasets.entities.entity_data_model import EntityColumnSet
 from snuba.datasets.entities.entity_key import EntityKey
 from snuba.datasets.entities.factory import get_entity, reset_entity_factory
+from snuba.datasets.storage import WritableStorage
 from snuba.pipeline.simple_pipeline import SimplePipelineBuilder
 
 reset_entity_factory()
@@ -20,7 +21,13 @@ def _convert_registered_class(cls: Any, name: str) -> dict[str, Any]:
     res = {}
     res[name] = cls.config_key()
     if cls.init_kwargs:
-        res["args"] = cls.init_kwargs
+        santized_args = {}
+        for k, v in cls.init_kwargs.items():
+            if isinstance(v, set) or isinstance(v, tuple):
+                santized_args[k] = list(v)
+            else:
+                santized_args[k] = v
+        res["args"] = santized_args
     return res
 
 
@@ -56,16 +63,24 @@ def convert_to_yaml(key: EntityKey, result_path: str) -> None:
         "name": key.value,
     }
     res["schema"] = _convert_data_model(entity.get_data_model())
-    assert (
-        len(entity.get_all_storages()) == 1
-    ), "why are there multiple storages on this entity? deal with it"
     storage = entity.get_writable_storage()
     if not storage:
+        assert (
+            len(entity.get_all_storages()) == 1
+        ), "why are there multiple storages on this entity? deal with it"
         storage = entity.get_all_storages()[0]
         res["readable_storage"] = storage.get_storage_key().value
     else:
-        res["readable_storage"] = storage.get_storage_key().value
         res["writable_storage"] = storage.get_storage_key().value
+        readable_storages = [
+            s for s in entity.get_all_storages() if not isinstance(s, WritableStorage)
+        ]
+        assert len(readable_storages) in (
+            1,
+            0,
+        ), f"should only be 1 readable storage {readable_storages}"
+        if readable_storages:
+            res["readable_storage"] = readable_storages[0].get_storage_key().value
     if processors := _convert_registered_classes(
         entity.get_query_processors(), "processor"
     ):
