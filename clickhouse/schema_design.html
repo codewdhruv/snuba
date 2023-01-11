@@ -1,0 +1,166 @@
+
+<!DOCTYPE html>
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" /><meta name="generator" content="Docutils 0.18.1: http://docutils.sourceforge.net/" />
+
+    <title>ClickHouse Schema Design Best Practices &#8212; Snuba 23.1.0.dev0 documentation</title>
+    <link rel="stylesheet" type="text/css" href="../_static/pygments.css" />
+    <link rel="stylesheet" type="text/css" href="../_static/alabaster.css" />
+    <script data-url_root="../" id="documentation_options" src="../_static/documentation_options.js"></script>
+    <script src="../_static/jquery.js"></script>
+    <script src="../_static/underscore.js"></script>
+    <script src="../_static/_sphinx_javascript_frameworks_compat.js"></script>
+    <script src="../_static/doctools.js"></script>
+    <link rel="index" title="Index" href="../genindex.html" />
+    <link rel="search" title="Search" href="../search.html" />
+    <link rel="prev" title="Clickhouse Queries Of Death" href="death_queries.html" />
+   
+  <link rel="stylesheet" href="../_static/custom.css" type="text/css" />
+  
+  
+  <meta name="viewport" content="width=device-width, initial-scale=0.9, maximum-scale=0.9" />
+
+  </head><body>
+  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          
+
+          <div class="body" role="main">
+            
+  <section id="clickhouse-schema-design-best-practices">
+<h1>ClickHouse Schema Design Best Practices<a class="headerlink" href="#clickhouse-schema-design-best-practices" title="Permalink to this heading">¶</a></h1>
+<section id="columns-based-on-dictionary-data">
+<h2>Columns based on dictionary data<a class="headerlink" href="#columns-based-on-dictionary-data" title="Permalink to this heading">¶</a></h2>
+<p>ClickHouse is a columnar datastore, and at run-time it loads columns on-demand
+based on the columns referenced in the query (both the columns <code class="docutils literal notranslate"><span class="pre">SELECT</span></code> ed
+and those part of the <code class="docutils literal notranslate"><span class="pre">WHERE</span></code> clause). The ability to store different columns independently
+and not load them for every row for every query is part of the performance advantage that
+ClickHouse provides over a traditional RDBMS (like PostgreSQL).</p>
+<p>Commonly, a data schema contains a flexible key:value pair mapping
+(canonically: <code class="docutils literal notranslate"><span class="pre">tags</span></code> or <code class="docutils literal notranslate"><span class="pre">contexts</span></code>) and stores that
+data in a column that contains two <code class="docutils literal notranslate"><span class="pre">Nested</span></code> arrays where the first array contains the keys
+of the dictionary and the second array contains the values. This works well when
+your dataset design gives you the ability to filter based on other attributes to a small
+number of rows and the flexibility of completely arbitrary keys and values are a real requirement.
+Often, however, a ClickHouse user is interested in rows that contain a specific tag key or a
+specific <code class="docutils literal notranslate"><span class="pre">key=value</span></code> pair. In this case one is often best-served by creating a top-level
+column and “promoting” the data to it <a class="footnote-reference brackets" href="#dupe" id="id1" role="doc-noteref"><span class="fn-bracket">[</span>1<span class="fn-bracket">]</span></a>.</p>
+<p>This promotion is preferable on a couple dimensions:</p>
+<ol class="arabic">
+<li><p>Even though it looks like a dictionary, our tags and contexts “maps” are actually arrays of keys and values.
+With array accesses Clickhouse needs to locate the index of the key whose value needs to be looked up.
+That is an O(N) lookup. The same key may be located at different indexes for each row.
+Once the index is known, looking up its value is O(1) since you perform direct index access.
+If the query has to lookup M rows, this becomes an O(M * N) in terms of time complexity.</p>
+<p>With direct column access, there is no index lookup for a key. The overall complexity to lookup M rows
+for “promoted columns” is O(M).</p>
+</li>
+<li><p>Queries that filter based on an array column may have to load the entire column into memory
+in order to do filtering. Adding a new index on top of a top-level column is a more
+straightforward operation that guarantees more consistent performance outcomes vs. iterating
+over an array</p></li>
+</ol>
+<aside class="footnote-list brackets">
+<aside class="footnote brackets" id="dupe" role="note">
+<span class="label"><span class="fn-bracket">[</span><a role="doc-backlink" href="#id1">1</a><span class="fn-bracket">]</span></span>
+<p>During migration from non-promoted to promoted, putting the data in both map and
+top-level column may be necessary so that queries of old rows can still access the
+attributes. After the table goes through a full TTL period and the API/storage definition
+is changed to serve the values from the top-level field, message processors should be changed
+to stop writing the data in duplicate places.</p>
+</aside>
+</aside>
+</section>
+</section>
+
+
+          </div>
+          
+        </div>
+      </div>
+      <div class="sphinxsidebar" role="navigation" aria-label="main navigation">
+        <div class="sphinxsidebarwrapper">
+            <p class="logo"><a href="../index.html">
+              <img class="logo" src="../_static/snuba.svg" alt="Logo"/>
+            </a></p>
+<h1 class="logo"><a href="../index.html">Snuba</a></h1>
+
+
+
+
+
+
+
+
+<h3>Navigation</h3>
+<ul class="current">
+<li class="toctree-l1"><a class="reference internal" href="../getstarted.html">Getting started with Snuba</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/overview.html">Snuba Architecture Overview</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/overview.html#snuba-within-a-sentry-deployment">Snuba within a Sentry Deployment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/datamodel.html">Snuba Data Model</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/slicing.html">Snuba Data Slicing (under development)</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/slicing.html#configuring-a-slice">Configuring a slice</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/slicing.html#working-in-a-sliced-environment">Working in a Sliced Environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../architecture/queryprocessing.html">Snuba Query Processing</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../configuration/overview.html">Dataset Configuration</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../query/overview.html">Querying Snuba</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../language/snql.html">The SnQL query language</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../migrations/modes.html">Snuba Migration Modes</a></li>
+<li class="toctree-l1"><a class="reference internal" href="../contributing/environment.html">Snuba development environment</a></li>
+<li class="toctree-l1"><a class="reference internal" href="death_queries.html">Clickhouse Queries Of Death</a></li>
+<li class="toctree-l1 current"><a class="current reference internal" href="#">ClickHouse Schema Design Best Practices</a></li>
+</ul>
+
+<div class="relations">
+<h3>Related Topics</h3>
+<ul>
+  <li><a href="../index.html">Documentation overview</a><ul>
+      <li>Previous: <a href="death_queries.html" title="previous chapter">Clickhouse Queries Of Death</a></li>
+  </ul></li>
+</ul>
+</div>
+<div id="searchbox" style="display: none" role="search">
+  <h3 id="searchlabel">Quick search</h3>
+    <div class="searchformwrapper">
+    <form class="search" action="../search.html" method="get">
+      <input type="text" name="q" aria-labelledby="searchlabel" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"/>
+      <input type="submit" value="Go" />
+    </form>
+    </div>
+</div>
+<script>document.getElementById('searchbox').style.display = "block"</script>
+
+
+
+
+
+
+
+
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="footer">
+      &copy;2021, Sentry Team and Contributors.
+      
+      |
+      Powered by <a href="http://sphinx-doc.org/">Sphinx 5.1.1</a>
+      &amp; <a href="https://github.com/bitprophet/alabaster">Alabaster 0.7.12</a>
+      
+      |
+      <a href="../_sources/clickhouse/schema_design.rst.txt"
+          rel="nofollow">Page source</a>
+    </div>
+
+    
+
+    
+  </body>
+</html>
