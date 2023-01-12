@@ -33,6 +33,20 @@ pipeline:
                   spec:
                     shell: Sh
                     command: cat /proc/cpuinfo
+              - step:
+                  type: Run
+                  name: log arc2
+                  identifier: log_arc2
+                  spec:
+                    shell: Sh
+                    command: lscpu
+              - step:
+                  type: Run
+                  name: log arc3
+                  identifier: log_arc3
+                  spec:
+                    shell: Sh
+                    command: uname -m
         variables:
           - name: SNUBA_IMAGE
             type: String
