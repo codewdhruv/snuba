@@ -40,18 +40,18 @@ pipeline:
                       uname -m
               - step:
                   type: Run
-                  name: log arc2
-                  identifier: log_arc2
+                  name: Create Image
+                  identifier: Create_Image
                   spec:
                     shell: Sh
-                    command: lscpu
-              - step:
-                  type: Run
-                  name: log arc3
-                  identifier: log_arc3
-                  spec:
-                    shell: Sh
-                    command: uname -m
+                    command: |-
+                      docker buildx create --name arm64-builder --use
+                      docker buildx build --platform linux/arm64 \
+                      --build-arg BUILDKIT_INLINE_CACHE=1 \
+                      -t <+pipeline.variables.SNUBA_IMAGE>:latest \
+                      -t <+pipeline.variables.SNUBA_IMAGE>:${{ steps.branch.outputs.branch }} \
+                      -t <+pipeline.variables.SNUBA_IMAGE>:${{ github.sha }} \
+                      --load .
         variables:
           - name: SNUBA_IMAGE
             type: String
