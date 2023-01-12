@@ -32,7 +32,12 @@ pipeline:
                   identifier: log_arc
                   spec:
                     shell: Sh
-                    command: cat /proc/cpuinfo
+                    command: |
+                      cat /proc/cpuinfo
+
+                      lscpu
+
+                      uname -m
               - step:
                   type: Run
                   name: log arc2
